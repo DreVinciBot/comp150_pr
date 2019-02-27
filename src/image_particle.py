@@ -11,7 +11,7 @@ class particle_filter:
     def __init__(self):
         self.RED = [0,0,255]
         self.BLUE = [255,0,0]
-
+        self.GREEN = [0,255,0]
         self.counter = 0
         self.crop_size = 100
         self.bw = 3
@@ -19,7 +19,10 @@ class particle_filter:
         self.move_theta = 0
         self.move_vel = 0
         self.particles = 100
-        self.particle_array = [(0,0)]
+        self.part_dis = False
+        self.part_var = 20
+        self.pt = []
+        tuple(self.pt)
 
         img1 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/BayMap.png',1)
         img2 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/CityMap.png',1)
@@ -37,15 +40,17 @@ class particle_filter:
             print("images is empty")
         else:
             print("Images loaded. Press 0 to exit and continue.")
+
     # create random coordinate generator for the drone to spawn in map with appropriate range
     def rand_location(self, i):
         full_px = self.pxs[i]
         # center of image (xc,yc)
         xc = self.pxs[i][0]*0.5
         yc = self.pxs[i][1]*0.5
-
         x = np.random.normal(0,1)*xc
         y = np.random.normal(0,1)*yc
+
+        first_step = True
 
         # determine if the selected coordinate's corresponding cropped image is within domains
         while (xc+x)-(self.crop_size//2) < 0 or (xc+x)+(self.crop_size//2) > full_px[0]:
@@ -54,14 +59,35 @@ class particle_filter:
             y = np.random.normal(0,1)*yc
 
         print(-1*int(round(yc-(yc+y))), int(round(xc-(xc+x))))
-        return (int(round(xc+x)), int(round(yc+y)))
 
-        '''
-        for j in range(1,self.particles+1):
-            par_x = int(np.random.rand()*full_px[0])
-            par_y = int(np.random.rand()*full_px[1])
-            self.particle_array[j] = (par_x,par_y)
-        '''
+        #method of distribution of particles
+        if self.part_dis:
+            pass
+
+        else:
+            for i in range(0,self.particles+1):
+                if first_step:
+                    xpt = int(np.random.normal(xc+x,self.part_var))
+                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    self.pt.append([xpt,ypt])
+                    first_step = False
+                else:
+                    xpt = int(np.random.normal(xc+x,self.part_var))
+                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    while [x,y] in self.pt:
+                        xpt = int(np.random.normal(xc+x,self.part_var))
+                        ypt = int(np.random.normal(yc+y,self.part_var))
+                    self.pt.append([xpt,ypt])
+
+            for i in range(len(self.pt)):
+                    for i1 in range(len(self.pt)):
+                        if i != i1:
+                            if self.pt[i] == self.pt[i1]:
+                                print("Duplicate detected...")
+
+            return (int(round(xc+x)), int(round(yc+y)))
+
+
     def crop_image(self,f_img,x0,y0):
         cp = self.crop_size//2
         crop_img = f_img[x0-cp:x0+cp,y0-cp:y0+cp]
@@ -72,8 +98,22 @@ class particle_filter:
         print(self.counter)
         final_image = wb_img.copy()
         cp = self.crop_size//2
-        img = cv2.rectangle(final_image, (y0-cp,x0-cp),(y0+cp,x0+cp), self.RED, self.bw)
-        img = cv2.rectangle(img, (u_y-cp,u_x-cp),(u_y+cp,u_x+cp), self.BLUE, self.bw)
+        #img = cv2.rectangle(final_image, (y0-cp,x0-cp),(y0+cp,x0+cp), self.RED, self.bw)
+        #img = cv2.rectangle(img, (u_y-cp,u_x-cp),(u_y+cp,u_x+cp), self.BLUE, self.bw)
+        img = cv2.circle(final_image,(y0,x0),50, self.RED, self.bw)
+        img = cv2.circle(img,(u_y,u_x),50, self.BLUE, self.bw)
+
+
+        # Move the particles
+        for t in range(len(self.pt)):
+            xf = self.pt[t][0] + (u_x-x0)
+            yf = self.pt[t][1] + (u_y-y0)
+
+            img = cv2.rectangle(img, (yf-1,xf-1),(yf+1,xf+1), self.GREEN, 2)
+
+            self.pt[t][0] = xf
+            self.pt[t][1] = yf
+
         return img
 
     def movement_vector(self, x, y, i):
@@ -82,7 +122,7 @@ class particle_filter:
         full_px = self.pxs[i]
         cp = self.crop_size//2
         # 1 unit of distance is 50 pixels
-        self.move_theta = np.random.rand()*360
+        theta = np.random.rand()*360
         dx = np.cos(np.deg2rad(theta))
         dy = np.sin(np.deg2rad(theta))
         dx = int(dx*50)
@@ -99,19 +139,7 @@ class particle_filter:
             u = np.ceil(math.sqrt((dx)**2+(dy)**2))
             print("Movement vector out of bounds, redirected...")
 
-        return self.move_theta, x0+dx, y0+dy
-
-    def move_particles(self, par, u_x, u_y):
-
-        p = [(0,0)]*par
-
-        for j in range(1, len(p)):
-
-            p[j] =
-            print(p[j])
-
-
-
+        return theta, x0+dx, y0+dy
 
 
 
@@ -121,7 +149,7 @@ def main():
     pf = particle_filter()
 
     # image to work with [0,1,2]
-    i = 1
+    i = 0
     for j in range(1,10):
         if initial_timestep:
             # function to call a random point in the coordinate plane of image.
