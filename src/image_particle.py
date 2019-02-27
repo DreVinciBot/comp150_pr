@@ -18,9 +18,9 @@ class particle_filter:
 
         self.move_theta = 0
         self.move_vel = 0
-        self.particles = 100
+        self.particles = 500
         self.part_dis = False
-        self.part_var = 20
+        self.part_var = 50
         self.pt = []
         tuple(self.pt)
 
@@ -74,7 +74,7 @@ class particle_filter:
                 else:
                     xpt = int(np.random.normal(xc+x,self.part_var))
                     ypt = int(np.random.normal(yc+y,self.part_var))
-                    while [x,y] in self.pt:
+                    while [xpt,ypt] in self.pt:
                         xpt = int(np.random.normal(xc+x,self.part_var))
                         ypt = int(np.random.normal(yc+y,self.part_var))
                     self.pt.append([xpt,ypt])
@@ -98,6 +98,7 @@ class particle_filter:
         print(self.counter)
         final_image = wb_img.copy()
         cp = self.crop_size//2
+
         #img = cv2.rectangle(final_image, (y0-cp,x0-cp),(y0+cp,x0+cp), self.RED, self.bw)
         #img = cv2.rectangle(img, (u_y-cp,u_x-cp),(u_y+cp,u_x+cp), self.BLUE, self.bw)
         img = cv2.circle(final_image,(y0,x0),50, self.RED, self.bw)
