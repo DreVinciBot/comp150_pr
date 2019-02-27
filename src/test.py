@@ -56,6 +56,9 @@ for t in range(len(a)):
     image[xf,yf] = GREEN
     #img = cv2.circle(image,(xf,yf),1, GREEN, 1)
 
-cv2.imshow('s_img', image)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+x = np.transpose([0,1])
+
+y = [0,1]
+
+
+print(y)
