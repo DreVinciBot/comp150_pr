@@ -19,7 +19,7 @@ class particle_filter:
         self.move_theta = 0
         self.move_vel = 0
         self.particles = 500
-        self.part_dis = False
+        self.part_dis = True
         self.part_var = 50
         self.pt = []
         tuple(self.pt)
@@ -62,7 +62,20 @@ class particle_filter:
 
         #method of distribution of particles
         if self.part_dis:
-            pass
+            h = full_px[0]
+            w = full_px[1]
+
+            n_x = math.sqrt(((w/h)*self.particles) + ((w-h)**2)/(4.0*h**2)) - ((w-h)/(2.0*h))
+            n_x = np.ceil(n_x)
+            n_y  = np.ceil(self.particles//n_x)
+            self.paricles = n_x*n_y
+            n_x = int(n_x)
+            n_y = int(n_y)
+
+            for j in range(0, h, h//n_x):
+                for k in range(0, w, w//n_y):
+                     self.pt.append([j,k])
+            print("Number of particles: " + str(self.paricles))
 
         else:
             for i in range(0,self.particles+1):
@@ -85,7 +98,7 @@ class particle_filter:
                             if self.pt[i] == self.pt[i1]:
                                 print("Duplicate detected...")
 
-            return (int(round(xc+x)), int(round(yc+y)))
+        return (int(round(xc+x)), int(round(yc+y)))
 
 
     def crop_image(self,f_img,x0,y0):
@@ -175,7 +188,6 @@ def main():
             # function to crop image given the image, crop size, and center point x0 and y0
             rb_img = pf.crop_image(pf.imgs[i],x0,y0)
             bb_img = pf.crop_image(pf.imgs[i],u_x,u_y)
-
 
             # function to display the location of the cropped image with red border
             full_img = pf.region_of_interest(pf.imgs[i],x0,y0,u_x,u_y,i)
