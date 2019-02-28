@@ -16,10 +16,14 @@ class particle_filter:
         self.crop_size = 100
         self.bw = 3
 
+        self.speed = 50
+        self.dx = 0
+        self.dy = 0
         self.move_theta = 0
         self.move_vel = 0
         self.particles = 500
         self.part_dis = False
+        self.part_flag = True
         self.part_var = 100
         self.sensor_var = 10
         self.pt = []
@@ -109,11 +113,12 @@ class particle_filter:
         crop_img = f_img[x0-cp:x0+cp,y0-cp:y0+cp]
         return crop_img
 
-    def region_of_interest(self,wb_img,x0,y0,u_x,u_y,i):
+    def region_of_interest(self,wb_img,x_prime,y_prime,u_x,u_y,i):
         self.counter = self.counter + 1
         print(self.counter)
-        final_image = wb_img.copy()
+        img = wb_img.copy()
         cp = self.crop_size//2
+
 
         #img = cv2.rectangle(final_image, (y0-cp,x0-cp),(y0+cp,x0+cp), self.RED, self.bw)
         #img = cv2.rectangle(img, (u_y-cp,u_x-cp),(u_y+cp,u_x+cp), self.BLUE, self.bw)
@@ -121,16 +126,26 @@ class particle_filter:
 
         # Blue circle represents the position of the drone
         # Red circle represents the observation image
-        img = cv2.circle(final_image,(u_y,u_x),50, self.BLUE, self.bw)
-        img = cv2.circle(img,(y0,x0),50, self.RED, self.bw)
+        img = cv2.circle(img,(u_y,u_x),50, self.BLUE, self.bw)
+        img = cv2.circle(img,(y_prime,x_prime),50, self.RED, self.bw)
 
-        # Move the particles
-        for t in range(len(self.pt)):
-            xf = self.pt[t][0] + (u_x-x0)
-            yf = self.pt[t][1] + (u_y-y0)
-            img = cv2.rectangle(img, (yf-1,xf-1),(yf+1,xf+1), self.GREEN, 2)
-            self.pt[t][0] = xf
-            self.pt[t][1] = yf
+        if self.part_flag:
+            self.part_flag = False
+            for t in range(len(self.pt)):
+                xf = self.pt[t][0]
+                yf = self.pt[t][1]
+                img = cv2.rectangle(img, (yf-1,xf-1),(yf+1,xf+1), self.GREEN, 2)
+                self.pt[t][0] = xf
+                self.pt[t][1] = yf
+
+        else:
+            # Move the particles
+            for t in range(len(self.pt)):
+                xf = self.pt[t][0] + self.dx
+                yf = self.pt[t][1] + self.dy
+                img = cv2.rectangle(img, (yf-1,xf-1),(yf+1,xf+1), self.GREEN, 2)
+                self.pt[t][0] = xf
+                self.pt[t][1] = yf
 
         return img
 
@@ -143,27 +158,25 @@ class particle_filter:
         theta = np.random.rand()*360
         dx = np.cos(np.deg2rad(theta))
         dy = np.sin(np.deg2rad(theta))
-        dx = int(dx*50)
-        dy = int(dy*50)
-        self.move_vel = np.ceil(math.sqrt((dx)**2+(dy)**2))
+        self.dx = int(dx*self.speed)
+        self.dy = int(dy*self.speed)
 
-        while (x0+dx)-cp < 0 or (x0+dx)+cp > full_px[0] or (y0+dy)-cp < 0 or (y0+dy)+cp > full_px[1]:
+        while (x0+self.dx)-cp < 0 or (x0+self.dx)+cp > full_px[0] or (y0+self.dy)-cp < 0 or (y0+self.dy)+cp > full_px[1]:
             theta = np.random.rand()*360
             print(theta)
             dx = np.cos(np.deg2rad(theta))
             dy = np.sin(np.deg2rad(theta))
-            dx = int(dx*50)
-            dy = int(dy*50)
-            u = np.ceil(math.sqrt((dx)**2+(dy)**2))
+            self.dx = int(dx*self.speed)
+            self.dy = int(dy*self.speed)
             print("Movement vector out of bounds, redirected...")
 
         # add noise for the sesor measurement
-        noise_x = (x0+dx) + np.random.normal(0,self.sensor_var)
-        noise_y = (y0+dy) + np.random.normal(0,self.sensor_var)
+        noise_x = (x0+self.dx) + np.random.normal(0,self.sensor_var)
+        noise_y = (y0+self.dy) + np.random.normal(0,self.sensor_var)
 
         #x0+dx, y0+dy are coordinates for the reference images
         #noise_x, noise_y are coordinates for the actual drone position
-        return x0+dx, y0+dy, int(noise_x), int(noise_y)
+        return x0+self.dx, y0+self.dy, int(noise_x), int(noise_y)
 
 def main():
     initial_timestep = True
@@ -179,12 +192,12 @@ def main():
             u_x = x0
             u_y = y0
             # function to crop image given the image, crop size, and center point x0 and y0
-            rb_img = pf.crop_image(pf.imgs[i],x0,y0)
-            bb_img = pf.crop_image(pf.imgs[i],u_x,u_y)
+            ref_img = pf.crop_image(pf.imgs[i],x0,y0)
+            obs_img = pf.crop_image(pf.imgs[i],u_x,u_y)
             # function to display full image with cropped region boxed
             full_img = pf.region_of_interest(pf.imgs[i],x0,y0,u_x,u_y,i)
 
-            cv2.imshow('s_img', full_img)
+            cv2.imshow('TimeStep 0', full_img)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
@@ -193,20 +206,24 @@ def main():
         else:
             # function to move the "drone" & paricles' true positino over the map
             # for each time step
-            u_x, u_y, noise_x, noise_y = pf.movement_vector(x0, y0, i)
+            ref_x, ref_y, drone_x, drone_y = pf.movement_vector(x0, y0, i)
+
             # function to crop image given the image, crop size, and center point x0 and y0
-            rb_img = pf.crop_image(pf.imgs[i],x0,y0)
-            bb_img = pf.crop_image(pf.imgs[i],u_x,u_y)
+            ref_img = pf.crop_image(pf.imgs[i],ref_x,ref_y)
+            obs_img = pf.crop_image(pf.imgs[i],drone_x,drone_y)
 
             # function to display the location of the cropped image with red border
-            full_img = pf.region_of_interest(pf.imgs[i],noise_x,noise_y,u_x,u_y,i)
+            full_img = pf.region_of_interest(pf.imgs[i],ref_x,ref_y,drone_x,drone_y,i)
 
-            cv2.imshow('s_img', full_img)
+            # Particle Filter Implementation
+            #particle_calculation()
+
+            cv2.imshow('TimeStep ' + str(pf.counter), full_img)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-            x0 = u_x
-            y0 = u_y
+            x0 = ref_x
+            y0 = ref_y
 
 if __name__ == '__main__':
     main()
