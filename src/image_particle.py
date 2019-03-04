@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import rospy
 import numpy as np
-import sys
+import os, sys
 import cv2
 from PIL import Image
 from random import random
@@ -25,7 +25,7 @@ class particle_filter:
         self.part_flag = True
 
         # Number of particles
-        self.particles = 500
+        self.particles = 2000
 
         l = [1.0]*self.particles
         self.weight = np.divide(l,len(l))
@@ -33,6 +33,9 @@ class particle_filter:
 
         # Distrubuitoin of particles
         self.part_dis = False
+
+        # Add noise to crop images
+        self.noise_flag = True
 
         # Concentration of particles
         self.part_var = 50
@@ -80,6 +83,31 @@ class particle_filter:
 
         # method of distribution of particles
         if self.part_dis:
+            self.part_var = 500
+
+            for i in range(0,self.particles):
+                if first_step:
+                    xpt = int(np.random.normal(xc+x,self.part_var))
+                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    self.particle_array.append([xpt,ypt])
+                    first_step = False
+                else:
+                    xpt = int(np.random.normal(xc+x,self.part_var))
+                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    while [xpt,ypt] in self.particle_array:
+                        xpt = int(np.random.normal(xc+x,self.part_var))
+                        ypt = int(np.random.normal(yc+y,self.part_var))
+                    self.particle_array.append([xpt,ypt])
+
+            for i in range(len(self.particle_array)):
+                    for i1 in range(len(self.particle_array)):
+                        if i != i1:
+                            if self.particle_array[i] == self.particle_array[i1]:
+                                print("Duplicate detected...")
+
+            print("Number of paricles: " + str(self.particles))
+
+            '''
             h = full_px[0]
             w = full_px[1]
 
@@ -99,7 +127,7 @@ class particle_filter:
             self.particle_weight = l
 
             print("Number of particles: " + str(self.particles))
-
+            '''
 
         else:
             for i in range(0,self.particles):
@@ -132,13 +160,40 @@ class particle_filter:
 
     def crop_image(self,f_img,x0,y0):
         cp = self.crop_size//2
-        crop_img = f_img[x0-cp:x0+cp,y0-cp:y0+cp]
+        crop_img = f_img.copy()
+        crop_img = crop_img[x0-cp:x0+cp,y0-cp:y0+cp]
+        pixel = crop_img.shape
+        row = pixel[0]
+        col = pixel[1]
+        ch = pixel[2]
+        S = 1000
 
+        # adding noise to the cropped image
+        if self.noise_flag:
+            low = -20
+            high = 20
+            guass = np.random.randint(low,high, size = (row,col, ch))
+            noise = np.uint8(guass)
+            noise = guass.reshape(row,col,ch)
 
-        # add guassian if willing
+            final_crop = crop_img + noise
+            final_crop = np.clip(final_crop, 0, 255)
+            final_crop = np.uint8(final_crop)
 
+            img_scale = S/col
+            newX, newY = col*img_scale, row*img_scale
+            final_crop = cv2.resize(final_crop, (int(newX), int(newY)))
 
-        return crop_img
+            # uncomment to display the
+            '''
+            cv2.imshow('With noise', final_crop)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            '''
+        else:
+            pass
+
+        return final_crop
 
     def region_of_interest(self,wb_img,x_prime,y_prime,u_x,u_y,i):
         self.counter = self.counter + 1
@@ -219,7 +274,7 @@ def main():
 
     # image to work with [0,1,2]
     i = 0
-    for j in range(1,10):
+    for j in range(1,3):
         if initial_timestep:
             # function to call a random point in the coordinate plane of image.
             # this point will serve as the drone's starting position (x0,y0)

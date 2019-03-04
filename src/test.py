@@ -7,58 +7,39 @@ import cv2
 
 img1 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/BayMap.png',1)
 px1 = img1.shape
+row = px1[0]
+col = px1[1]
+ch = px1[2]
+
+print(img1.height)
+
+crop_img = img1[0:10,0:10]
+px1 = crop_img.shape
+row = px1[0]
+col = px1[1]
+ch = px1[2]
+
+cv2.imshow('TimeStep 0', crop_img)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 
 print(px1)
 
-GREEN = [0,255,0]
+low = -20
+high = 20
 
-crop_size = 2
-theta = 0
+guass = np.random.randint(low,high, size = (row,col, ch))
+mean = (0.0)
+std = (10)
+#noise = np.random.normal(mean, std, img1.shape)
+#noise = np.uint8(noise)
+noise = guass.reshape(row,col,ch)
 
-var = 50
+guass = crop_img + noise
 
-particles = 150
+noisy_img_clipped = np.clip(guass, 0, 255)
+noisy_img_clipped = np.uint8(noisy_img_clipped)
 
-h = px1[0]
-w = px1[1]
-
-xc = px1[0]*0.5
-yc = px1[1]*0.5
-
-n_x = math.sqrt(((w/h)*particles) + ((w-h)**2)/(4.0*h**2)) - ((w-h)/(2.0*h))
-
-n_x = np.ceil(n_x)
-n_y  = np.ceil(particles//n_x)
-
-particles = n_x*n_y
-
-l = [1.0]*particles
-weight = np.divide(l,len(l))
-tt = l
-
-
-print(particles, n_x, n_y)
-
-h = int(h)
-w = int(w)
-n_x = int(n_x)
-n_y = int(n_y)
-
-a = []
-tuple(a)
-image = np.zeros((h,w,3),np.uint8)
-
-for j in range(0, h, h//n_x+1):
-    for k in range(0, w, w//n_y+1):
-         a.append([j,k])
-
-for t in range(len(a)):
-    xf = a[t][0]
-    yf = a[t][1]
-
-    image[xf,yf] = GREEN
-    #img = cv2.circle(image,(xf,yf),1, GREEN, 1)
-
-for i in range(len(a)):
-    tt[i] = [a[i], weight[i]]
-    print(tt[i])
+cv2.imshow('TimeStep 0', noisy_img_clipped)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
