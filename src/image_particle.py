@@ -12,6 +12,7 @@ class particle_filter:
         self.RED = [0,0,255]
         self.BLUE = [255,0,0]
         self.GREEN = [0,255,0]
+        self.BLACK = [0,0,0]
         self.counter = 0
         self.crop_size = 100
         self.bw = 3
@@ -35,7 +36,7 @@ class particle_filter:
         self.part_dis = False
 
         # Add noise to crop images
-        self.noise_flag = True
+        self.noise_flag = False
 
         # Concentration of particles
         self.part_var = 50
@@ -76,15 +77,13 @@ class particle_filter:
         while (yc+y)-(self.crop_size//2) < 0 or (yc+y)+(self.crop_size//2) > full_px[1]:
             y = np.random.normal(0,1)*yc
 
-
         nx = -1*int(round(yc-(yc+y)))
         ny =  int(round(xc-(xc+x)))
         print("Starting position: (" + str(nx) + "," + str(ny)+")")
 
         # method of distribution of particles
+        self.part_dis = False
         if self.part_dis:
-            self.part_var = 500
-
             for i in range(0,self.particles):
                 if first_step:
                     xpt = int(np.random.normal(xc+x,self.part_var))
@@ -98,65 +97,43 @@ class particle_filter:
                         xpt = int(np.random.normal(xc+x,self.part_var))
                         ypt = int(np.random.normal(yc+y,self.part_var))
                     self.particle_array.append([xpt,ypt])
-
-            for i in range(len(self.particle_array)):
-                    for i1 in range(len(self.particle_array)):
-                        if i != i1:
-                            if self.particle_array[i] == self.particle_array[i1]:
-                                print("Duplicate detected...")
-
-            print("Number of paricles: " + str(self.particles))
-
-            '''
-            h = full_px[0]
-            w = full_px[1]
-
-            n_x = math.sqrt(((w/h)*self.particles) + ((w-h)**2)/(4.0*h**2)) - ((w-h)/(2.0*h))
-            n_x = np.ceil(n_x)
-            n_y  = np.ceil(self.particles//n_x)
-            self.particles = n_x*n_y
-            n_x = int(n_x)
-            n_y = int(n_y)
-
-            for j in range(0, h, h//n_x+1):
-                for k in range(0, w, w//n_y+1):
-                     self.particle_array.append([j,k])
-
-            l = [1.0]*self.particles
-            self.weight = np.divide(l,len(l))
-            self.particle_weight = l
-
-            print("Number of particles: " + str(self.particles))
-            '''
 
         else:
             for i in range(0,self.particles):
                 if first_step:
-                    xpt = int(np.random.normal(xc+x,self.part_var))
-                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    xpt = np.random.randint(low = self.crop_size//2, high = full_px[0]- self.crop_size//2)
+                    ypt = np.random.randint(low = self.crop_size//2, high = full_px[1] - self.crop_size//2)
                     self.particle_array.append([xpt,ypt])
                     first_step = False
                 else:
-                    xpt = int(np.random.normal(xc+x,self.part_var))
-                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    xpt = np.random.randint(low = self.crop_size//2, high = full_px[0]-self.crop_size//2)
+                    ypt = np.random.randint(low = self.crop_size//2, high = full_px[1] - self.crop_size//2)
+
                     while [xpt,ypt] in self.particle_array:
-                        xpt = int(np.random.normal(xc+x,self.part_var))
-                        ypt = int(np.random.normal(yc+y,self.part_var))
+                        xpt = np.random.randint(low = self.crop_size//2, high = full_px[0]-self.crop_size//2)
+                        ypt = np.random.randint(low = self.crop_size//2, high = full_px[1] - self.crop_size//2)
+
+                        if (xc+xpt)-(self.crop_size//2) > 0 or (xc+xpt)+(self.crop_size//2) < full_px[0]:
+                            xpt = np.random.randint(low = self.crop_size//2, high = full_px[0]-self.crop_size//2)
+
+                        elif (yc+ypt)-(self.crop_size//2) > 0 or (yc+ypt)+(self.crop_size//2) < full_px[1]:
+                            ypt = np.random.randint(low = self.crop_size//2, high = full_px[1] - self.crop_size//2)
                     self.particle_array.append([xpt,ypt])
 
-            for i in range(len(self.particle_array)):
-                    for i1 in range(len(self.particle_array)):
-                        if i != i1:
-                            if self.particle_array[i] == self.particle_array[i1]:
-                                print("Duplicate detected...")
+        # notify me for any duplicates
+        for i in range(len(self.particle_array)):
+            for i1 in range(len(self.particle_array)):
+                if i != i1:
+                    if self.particle_array[i] == self.particle_array[i1]:
+                        print("Duplicate detected...")
 
-            print("Number of paricles: " + str(self.particles))
+        print("Number of paricles: " + str(self.particles))
 
         # combine particles with initial weight
         for i in range(len(self.particle_array)):
             self.particle_weight[i] = [self.particle_array[i], self.weight[i]]
 
-        return (int(round(xc+x)), int(round(yc+y)), self.particle_weight)
+        return (int(round(xc+x)), int(round(yc+y)))
 
     def crop_image(self,f_img,x0,y0):
         cp = self.crop_size//2
@@ -166,7 +143,6 @@ class particle_filter:
         row = pixel[0]
         col = pixel[1]
         ch = pixel[2]
-        S = 1000
 
         # adding noise to the cropped image
         if self.noise_flag:
@@ -178,11 +154,7 @@ class particle_filter:
 
             final_crop = crop_img + noise
             final_crop = np.clip(final_crop, 0, 255)
-            final_crop = np.uint8(final_crop)
-
-            img_scale = S/col
-            newX, newY = col*img_scale, row*img_scale
-            final_crop = cv2.resize(final_crop, (int(newX), int(newY)))
+            crop_img = np.uint8(final_crop)
 
             # uncomment to display the
             '''
@@ -193,16 +165,11 @@ class particle_filter:
         else:
             pass
 
-        return final_crop
+        return crop_img
 
     def region_of_interest(self,wb_img,x_prime,y_prime,u_x,u_y,i):
         self.counter = self.counter + 1
-        #print(self.counter)
         img = wb_img.copy()
-
-        #img = cv2.rectangle(final_image, (y0-cp,x0-cp),(y0+cp,x0+cp), self.RED, self.bw)
-        #img = cv2.rectangle(img, (u_y-cp,u_x-cp),(u_y+cp,u_x+cp), self.BLUE, self.bw)
-        #img = cv2.circle(final_image,(y0,x0),50, self.RED, self.bw)
 
         # Blue circle represents the position of the drone
         # Red circle represents the observation image
@@ -211,11 +178,11 @@ class particle_filter:
 
         if self.part_flag:
             self.part_flag = False
-            for t in range(len(self.particle_array)):
-                xf = self.particle_array[t][0]
-                yf = self.particle_array[t][1]
-                wt = self.weight[t]
-                img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 1)
+            for t in range(len(self.particle_weight)):
+                xf = self.particle_weight[t][0][0]
+                yf = self.particle_weight[t][0][1]
+                wt = self.particle_weight[t][1]
+                img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 2)
         else:
             pass
 
@@ -250,21 +217,27 @@ class particle_filter:
         #noise_x, noise_y are coordinates for the actual drone position
         return x0+self.dx, y0+self.dy, int(noise_x), int(noise_y)
 
+    def particle_calculation(self, img, i):
 
-    def particle_calculation(self, img):
 
-        for h in range(len(self.particle_array)):
-            xf = self.particle_array[h][0] + self.dx
-            yf = self.particle_array[h][1] + self.dy
-            wt = self.weight[h]
-            full_img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 1)
+        for h in range(len(self.particle_weight)):
 
+            xf = self.particle_weight[h][0][0]
+            yf = self.particle_weight[h][0][1]
+            wt = self.particle_weight[h][1]
+            full_img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 2)
+
+            temp_img = self.crop_image(self.imgs[i] ,xf,yf)
+            cv2.imshow('particle_img', temp_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
             # recalculate the weights
 
-            self.particle_array[h][0] = xf
-            self.particle_array[h][1] = yf
-            self.weight[h] = wt
+            self.particle_weight[h][0][0] = xf
+            self.particle_weight[h][0][1] = yf
+            self.particle_weight[h][1] = wt
+
 
         return full_img
 
@@ -278,7 +251,7 @@ def main():
         if initial_timestep:
             # function to call a random point in the coordinate plane of image.
             # this point will serve as the drone's starting position (x0,y0)
-            x0, y0, particle_weight = pf.rand_location(i)
+            x0, y0 = pf.rand_location(i)
             u_x = x0
             u_y = y0
             # function to crop image given the image, crop size, and center point x0 and y0
@@ -305,13 +278,17 @@ def main():
             # function to display the location of the cropped image with red border
             full_img = pf.region_of_interest(pf.imgs[i],ref_x,ref_y,drone_x,drone_y,i)
 
-            # Particle Filter Implementation
-            test = pf.particle_calculation(full_img)
+            # function to compare cropped image to the oberserved images
 
+
+
+            # Particle Filter Implementation
+            test = pf.particle_calculation(full_img, i)
+            '''
             cv2.imshow('TimeStep ' + str(pf.counter), test)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
-
+            '''
             x0 = ref_x
             y0 = ref_y
 
