@@ -3,26 +3,42 @@ import rospy
 import numpy as np
 import math, operator
 import cv2
+from skimage.measure import compare_ssim as ssim
+from matplotlib.pyplot import imshow
+import matplotlib.pyplot as plt
+import argparse
+import imutils
+import ImageChops
 
+from random import random
 from PIL import Image # No need for ImageChops
 import math
 
-image = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/BayMap.png',1)
-print(image.shape)
-crop_size = 100
+from skimage import img_as_float
+from skimage.measure import compare_mse as mse
 
-im1 = image[0:10,0:10]
+image = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/MarioMap.png',1)
+
+'''
+height, width = img1.shape[:2]
+cv2.namedWindow('jpg', cv2.WINDOW_NORMAL)
+cv2.resizeWindow('jpg', width, height)
+cv2.imshow('jpg', img1)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+'''
 
 
-im2 = image[800:810,800:810]
+
+MyList = [1, 2, 3, 'a', 'b,', 'c']
+
+idx = np.random.choice(4, size=200)
 
 
-err = np.sum((im1.astype("float") - im2.astype("float")) ** 2)
-err /= float(im1.shape[0] * im1.shape[1])
 
-eucliDis = np.sum((im1-im2)**2)
 
-print(err, eucliDis)
+text = [[4, 3, 8, 9, 5, 1, 2, 7, 6], [8, 3, 4, 1, 5, 9, 6, 7, 2],
+[6, 1, 8, 7, 5, 3, 2, 9, 4], [6, 9, 8, 7, 5, 3, 2, 1, 4],
+[6, 1, 8, 7, 5, 3, 2, 1, 4], [6, 1, 3, 2, 9, 4, 8, 7, 5]]
 
-x =  np.random.randint(crop_size//2, image.shape[0] - crop_size//2)
-print(x)
+print(text)

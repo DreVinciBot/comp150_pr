@@ -6,6 +6,9 @@ import cv2
 from PIL import Image
 from random import random
 import math
+import time
+from skimage.measure import compare_ssim as ssim
+
 
 class particle_filter:
     def __init__(self):
@@ -20,20 +23,20 @@ class particle_filter:
         self.speed = 50
         self.dx = 0
         self.dy = 0
-        self.scalar = 1000
         self.move_theta = 0
         self.move_vel = 0
         self.part_flag = True
 
         # Number of particles
-        self.particles = 2000
+        self.particles = 200
 
         l = [1.0]*self.particles
         self.weight = np.divide(l,len(l))
         self.particle_weight = l
+        #self.resample = []
 
         # Distrubuitoin of particles
-        self.part_dis = False
+        self.part_dis = True
 
         # Add noise to crop images
         self.noise_flag = False
@@ -42,6 +45,7 @@ class particle_filter:
         self.part_var = 50
         self.sensor_var = 10
         self.particle_array = []
+        self.new_particles = []
 
         img1 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/BayMap.png',1)
         img2 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/CityMap.png',1)
@@ -66,37 +70,38 @@ class particle_filter:
         # center of image (xc,yc)
         xc = self.pxs[i][0]*0.5
         yc = self.pxs[i][1]*0.5
-        x = np.random.normal(0,1)*xc
-        y = np.random.normal(0,1)*yc
+        y = np.random.randint(low = (-full_px[1]//2)- self.crop_size//2 ,high = (full_px[1]//2) - self.crop_size//2)
+        x = np.random.randint(low = (-full_px[0]//2)- self.crop_size//2 ,high = (full_px[0]//2) - self.crop_size//2)
 
         first_step = True
 
-        # determine if the selected coordinate's corresponding cropped image is within domains
-        while (xc+x)-(self.crop_size//2) < 0 or (xc+x)+(self.crop_size//2) > full_px[0]:
-            x = np.random.normal(0,1)*xc
-        while (yc+y)-(self.crop_size//2) < 0 or (yc+y)+(self.crop_size//2) > full_px[1]:
-            y = np.random.normal(0,1)*yc
-
         nx = -1*int(round(yc-(yc+y)))
-        ny =  int(round(xc-(xc+x)))
+        ny = int(round(xc-(xc+x)))
         print("Starting position: (" + str(nx) + "," + str(ny)+")")
 
-        # method of distribution of particles
-        self.part_dis = False
+        # Large/Small distribution of particles
+        #self.part_dis = False
         if self.part_dis:
             for i in range(0,self.particles):
                 if first_step:
-                    xpt = int(np.random.normal(xc+x,self.part_var))
-                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    xpt = int(np.random.normal(x,self.part_var))
+                    ypt = int(np.random.normal(y,self.part_var))
+
+                    while (xc+xpt)-(self.crop_size//2) < 0 or (xc+xpt)+(self.crop_size//2) > full_px[0]:
+                        xpt = int(np.random.normal(0,1)*xc)
+                    while (yc+ypt)-(self.crop_size//2) < 0 or (yc+ypt)+(self.crop_size//2) > full_px[1]:
+                        ypt = int(np.random.normal(0,1)*yc)
+
                     self.particle_array.append([xpt,ypt])
                     first_step = False
                 else:
-                    xpt = int(np.random.normal(xc+x,self.part_var))
-                    ypt = int(np.random.normal(yc+y,self.part_var))
+                    xpt = int(np.random.normal(x,self.part_var))
+                    ypt = int(np.random.normal(y,self.part_var))
+
                     while [xpt,ypt] in self.particle_array:
-                        xpt = int(np.random.normal(xc+x,self.part_var))
-                        ypt = int(np.random.normal(yc+y,self.part_var))
-                    self.particle_array.append([xpt,ypt])
+                        xpt = int(np.random.normal(x,self.part_var))
+
+                    self.particle_array.append([-ypt,xpt])
 
         else:
             for i in range(0,self.particles):
@@ -127,7 +132,7 @@ class particle_filter:
                     if self.particle_array[i] == self.particle_array[i1]:
                         print("Duplicate detected...")
 
-        print("Number of paricles: " + str(self.particles))
+        print("Number of particles: " + str(self.particles))
 
         # combine particles with initial weight
         for i in range(len(self.particle_array)):
@@ -137,12 +142,23 @@ class particle_filter:
 
     def crop_image(self,f_img,x0,y0):
         cp = self.crop_size//2
-        crop_img = f_img.copy()
-        crop_img = crop_img[x0-cp:x0+cp,y0-cp:y0+cp]
+        crop = f_img.copy()
+        #crop_img = crop[x0-cp:x0+cp,y0-cp:y0+cp]
+        crop_img = crop[y0-cp:y0+cp,x0-cp:x0+cp]
+
+
         pixel = crop_img.shape
         row = pixel[0]
         col = pixel[1]
         ch = pixel[2]
+
+        if row != col:
+            #print("Bad particle, replacing with blank image...")
+            crop_img = np.zeros((self.crop_size, self.crop_size,3), np.uint8)
+
+        elif row == 0 and col == 0:
+            #print("Bad particle, replacing with blank image...")
+            crop_img = np.zeros((self.crop_size, self.crop_size,3), np.uint8)
 
         # adding noise to the cropped image
         if self.noise_flag:
@@ -167,22 +183,24 @@ class particle_filter:
 
         return crop_img
 
-    def region_of_interest(self,wb_img,x_prime,y_prime,u_x,u_y,i):
+    def region_of_interest(self,wb_img,ref_x,ref_y,drone_x,drone_y,i):
         self.counter = self.counter + 1
         img = wb_img.copy()
 
         # Blue circle represents the position of the drone
         # Red circle represents the observation image
-        img = cv2.circle(img,(u_y,u_x),50, self.BLUE, self.bw)
-        img = cv2.circle(img,(y_prime,x_prime),50, self.RED, self.bw)
+        #img = cv2.circle(img,(drone_y,drone_x),50, self.BLUE, self.bw)
+        #img = cv2.circle(img, (drone_y,drone_x),10, self.BLACK, self.bw )
+        img = cv2.circle(img,(ref_y,ref_x),50, self.RED, self.bw)
 
+        # display all initial particles
         if self.part_flag:
             self.part_flag = False
             for t in range(len(self.particle_weight)):
                 xf = self.particle_weight[t][0][0]
                 yf = self.particle_weight[t][0][1]
                 wt = self.particle_weight[t][1]
-                img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 2)
+                img = cv2.circle(img, (yf,xf), int(wt), self.GREEN, 4)
         else:
             pass
 
@@ -217,29 +235,86 @@ class particle_filter:
         #noise_x, noise_y are coordinates for the actual drone position
         return x0+self.dx, y0+self.dy, int(noise_x), int(noise_y)
 
-    def particle_calculation(self, img, i):
+    def particle_calculation(self, img, ref_image, i):
+        #temp_img = [[0]]*len(self.particle_weight)
+        total = 0
+        normailize = 0
 
-
+        full_px = self.pxs[i]
+        # calculate the RMS for all particles
         for h in range(len(self.particle_weight)):
+            xf = self.particle_weight[h][0][0]
+            yf = self.particle_weight[h][0][1]
 
+            if (xf in range(self.crop_size//2), full_px[0]-(self.crop_size//2)+1 and yf in range(self.crop_size//2), full_px[1] -(self.crop_size//2)+1):
+
+                temp_img = self.crop_image(self.imgs[i] ,xf,yf)
+                #cv2.destroyAllWindows()
+
+                err = np.sqrt(np.mean((np.subtract(ref_image,temp_img)**2)))
+                #score = math.exp(-err)
+                score = math.e ** -(err)
+                self.particle_weight[h][1] = score
+                total += score
+
+            else:
+                self.particle_weight[h][1] = 0
+        # normailize the weights
+        for h in range(len(self.particle_weight)):
+            self.particle_weight[h][1] = self.particle_weight[h][1]/total
+            normailize += self.particle_weight[h][1]
+
+        # gather all good particles
+        for h in range(len(self.particle_weight)):
+            if self.particle_weight[h][1] > 0:
+                self.new_particles.append(self.particle_weight[h])
+            else:
+                print("Removed paricle...")
+
+        # method to resample the particles
+        idx = np.random.choice(len(self.new_particles)), size=self.particles)
+
+        for h in range(self.particles):
+            self.particle_weight[h] = self.new_particles[idx[h]]
+
+        # print out the particles with corresponding weights
+        for h in range(len(self.particle_weight)):
             xf = self.particle_weight[h][0][0]
             yf = self.particle_weight[h][0][1]
             wt = self.particle_weight[h][1]
-            full_img = cv2.circle(img, (yf,xf), int(wt*self.scalar), self.GREEN, 2)
+            full_img = cv2.circle(img, (yf,xf), int(1), self.GREEN, 2)
 
-            temp_img = self.crop_image(self.imgs[i] ,xf,yf)
-            cv2.imshow('particle_img', temp_img)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            nx = int(np.random.normal(0,5))
+            ny = int(np.random.normal(0,5))
+            self.particle_weight[h][0][0] = self.particle_weight[h][0][0] + self.dx + nx
+            self.particle_weight[h][0][1] = self.particle_weight[h][0][1] + self.dy + ny
 
-            # recalculate the weights
+        return full_img
+
+'''
+
+        # print out the particles with corresponding weights
+        for h in range(len(self.new_particles)):
+            xf = self.new_particles[h][0][0]
+            yf = self.new_particles[h][0][1]
+            wt = self.new_particles[h][1]
+
+            scale = 10**8
+            full_img = cv2.circle(img, (yf,xf), int(wt), self.GREEN, 2)
+
+            # check if both reference image and temp_image are equal in size to compare
+            if (temp_img.shape == ref_image.shape):
+                s = ssim(temp_img,ref_image, multichannel = True)
+
+                wt = (s * wt)*scale
+                #print(wt)
+            else:
+                print("Image size do not match ..." + str(h))
 
             self.particle_weight[h][0][0] = xf
             self.particle_weight[h][0][1] = yf
             self.particle_weight[h][1] = wt
-
-
-        return full_img
+'''
 
 def main():
     initial_timestep = True
@@ -260,14 +335,20 @@ def main():
             # function to display full image with cropped region boxed
             full_img = pf.region_of_interest(pf.imgs[i],x0,y0,u_x,u_y,i)
 
-            cv2.imshow('TimeStep 0', full_img)
+
+            height, width = full_img.shape[:2]
+            cv2.namedWindow('jpg', cv2.WINDOW_NORMAL)
+            cv2.resizeWindow('jpg', width, height)
+            cv2.imshow('jpg', full_img)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
             initial_timestep = False
 
         else:
-            # function to move the "drone" & paricles' true positino over the map
+            pass
+            '''
+            # function to move the "drone" & particles' true positino over the map
             # for each time step
             ref_x, ref_y, drone_x, drone_y = pf.movement_vector(x0, y0, i)
 
@@ -275,22 +356,23 @@ def main():
             ref_img = pf.crop_image(pf.imgs[i],ref_x,ref_y)
             obs_img = pf.crop_image(pf.imgs[i],drone_x,drone_y)
 
+
             # function to display the location of the cropped image with red border
             full_img = pf.region_of_interest(pf.imgs[i],ref_x,ref_y,drone_x,drone_y,i)
 
-            # function to compare cropped image to the oberserved images
-
-
-
             # Particle Filter Implementation
-            test = pf.particle_calculation(full_img, i)
-            '''
-            cv2.imshow('TimeStep ' + str(pf.counter), test)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            '''
+            test = pf.particle_calculation(full_img, obs_img, i)
+
+
             x0 = ref_x
             y0 = ref_y
 
+            height, width = test.shape[:2]
+            cv2.namedWindow('TimeStep ' + str(pf.counter), cv2.WINDOW_NORMAL)
+            cv2.resizeWindow('TimeStep ' + str(pf.counter), width, height)
+            cv2.imshow('TimeStep ' + str(pf.counter), test)
+            cv2.waitKey(2000)
+            #cv2.destroyAllWindows()
+            '''
 if __name__ == '__main__':
     main()
