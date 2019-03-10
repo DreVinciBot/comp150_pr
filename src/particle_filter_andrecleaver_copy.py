@@ -9,12 +9,9 @@ import rospy
 import numpy as np
 import os, sys
 import cv2
-from PIL import Image
 import random
 import math
 import time
-# from skimage.measure import compare_ssim as ssim
-# from sklearn import preprocessing
 
 class particle_filter:
     def __init__(self):
@@ -24,7 +21,7 @@ class particle_filter:
         self.ORANGE = [0,165,250]
         self.BLACK = [0,0,0]
         self.counter = 0
-        self.crop_size = 100
+        self.crop_size = 50
         self.bw = 3
 
         self.speed = 50
@@ -47,10 +44,11 @@ class particle_filter:
         self.noise_flag = False
 
         # Concentration of particles
-        self.part_var = 50
+        self.part_var = 100
         self.sensor_var = 5
         self.particle_array = []
         self.new_particles = []
+        self.goal = False
 
         # load pictures by providing the path location
         img1 = cv2.imread('/home/drevinci/dre_catkin_ws/src/demo/BayMap.png',1)
@@ -88,9 +86,9 @@ class particle_filter:
         print("Starting position: (" + str(nx) + "," + str(ny)+")")
 
         # Generate the particles within a small circlular distrubuition
-        #self.part_dis = False
+        self.part_dis = False
         if self.part_dis:
-            rc = 100
+            rc = 150
             for i in range(0, self.particles):
                 # random angle
                 alpha = 2 * math.pi * random.random()
@@ -187,8 +185,9 @@ class particle_filter:
 
     # core of the code, takes particles and calculates the error of the particles
     # image from the observation image. I am using Root Mean Square Error (RMSE) method
-    def particle_calculation(self, img, ref_image, i):
+    def particle_calculation(self, img, ref_image, i, xP, yP):
         score = 0
+        counter = 0
         cp = self.crop_size//2
         w, h, ch = img.shape
         full_px = self.pxs[i]
@@ -220,10 +219,16 @@ class particle_filter:
         self.particle_array = np.array(self.particle_array)
         v_sum = np.sum(self.particle_array[:,2])
         for h in range(len(self.particle_array)):
-                pt_x, pt_y, pt_wt = self.particle_array[h][0], self.particle_array[h][1], self.particle_array[h][2]
-                self.particle_array[h][2] =  pt_wt/ v_sum
-                full_img = cv2.circle(img, (int(pt_y),int(pt_x)), int(self.particle_array[h][2]*100), self.ORANGE, 3)
+            pt_x, pt_y, pt_wt = self.particle_array[h][0], self.particle_array[h][1], self.particle_array[h][2]
+            self.particle_array[h][2] =  pt_wt/ v_sum
+            full_img = cv2.circle(img, (int(pt_y),int(pt_x)), int(self.particle_array[h][2]*1000), self.ORANGE, 3)
 
+            # print out if goal has been met.
+            if ((xP-cp) < pt_x < (xP+cp)) and ((yP-cp) < pt_y < (yP+cp)):
+                counter +=1
+                if counter > self.particles*0.8:
+                    print("Localized on Drone!")
+                    self.goal = True
         # gather all 'good' particles if the probability is greater than zero
         nice_particles = []
         for h in range(0,len(self.particle_array)):
@@ -241,12 +246,12 @@ class particle_filter:
         particle_prime = []
         for h in range(len(self.particle_array)):
 
-            xnoise_pt = np.random.randint(5)
-            ynoise_pt = np.random.randint(5)
+            xnoise_pt = np.random.randint(low = -5,high =5)
+            ynoise_pt = np.random.randint(low = -5,high =5)
             x_new = self.particle_array[h][0] + self.dx + xnoise_pt
             y_new = self.particle_array[h][1] + self.dy + ynoise_pt
             particle_prime.append([x_new, y_new, 1])
-            self.particle_array[h][2] = 1
+            #self.particle_array[h][2] = 1
 
         self.particle_array = particle_prime
 
@@ -277,14 +282,21 @@ def main():
         full_img = pf.region_of_interest(pf.imgs[i],drone_x,drone_y,i)
 
         # Particle Filter Implementation
-        test = pf.particle_calculation(full_img, obs_img, i)
+        test = pf.particle_calculation(full_img, obs_img, i, drone_x,drone_y )
+
 
         # display figure with particles and drone
         winname = 'TimeStep ' + str(counter)
         cv2.namedWindow(winname)        # Create a named window
         cv2.moveWindow(winname, 40,30)  # Move it to (40,30)
         cv2.imshow(winname, test)
-        cv2.waitKey(0)
+        cv2.waitKey(100)
+
+        if pf.goal:
+            print("Localized at TimeStep : " + str(counter))
+            break
+        if j == 99:
+            "Fail to converge..."
         #cv2.destroyAllWindows()
         x0 = drone_x
         y0 = drone_y
