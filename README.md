@@ -1,4 +1,4 @@
-# comp150_pr
+# comp150_Particle Filter
 
 Description of algorithm and experiment:
 
